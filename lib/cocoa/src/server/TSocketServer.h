@@ -21,9 +21,9 @@
 #import "TProtocolFactory.h"
 #import "TProcessorFactory.h"
 
-#if !TARGET_OS_IPHONE
+#if !TARGET_OS_IPHONE && !defined(GNUSTEP)
 #import <CoreServices/CoreServices.h>
-#else
+#elif !defined(GNUSTEP)
 #import <CFNetwork/CFNetwork.h>
 #endif
 

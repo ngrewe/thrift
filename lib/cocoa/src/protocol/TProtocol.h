@@ -69,7 +69,7 @@ typedef NS_ENUM (int, TType) {
                               error:(NSError *__autoreleasing *)error;
 -(BOOL) readFieldEnd:(NSError *__autoreleasing *)error;
 
--(BOOL) readString:(NSString *__nonnull __autoreleasing *__nonnull)value error:(NSError **)error;
+-(BOOL) readString:(NSString *_Nonnull __autoreleasing *_Nonnull)value error:(NSError **)error;
 
 -(BOOL) readBool:(BOOL *)value error:(NSError *__autoreleasing *)error;
 
@@ -83,7 +83,7 @@ typedef NS_ENUM (int, TType) {
 
 -(BOOL) readDouble:(double *)value error:(NSError *__autoreleasing *)error;
 
--(BOOL) readBinary:(NSData *__nonnull __autoreleasing *__nonnull)value error:(NSError **)error;
+-(BOOL) readBinary:(NSData *_Nonnull __autoreleasing *_Nonnull)value error:(NSError **)error;
 
 -(BOOL) readMapBeginReturningKeyType:(nullable SInt32 *)keyType
                            valueType:(nullable SInt32 *)valueType

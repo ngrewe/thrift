@@ -26,6 +26,10 @@
 #import <sys/socket.h>
 #include <netinet/in.h>
 
+#ifdef GNUSTEP
+#include <dispatch/dispatch.h>
+#endif
+
 
 
 NSString *const TSocketServerClientConnectionFinished = @"TSocketServerClientConnectionFinished";
@@ -46,21 +50,9 @@ NSString *const TSockerServerTransportKey = @"TSockerServerTransport";
 
 @implementation TSocketServer
 
--(instancetype) initWithPort:(int)port
-             protocolFactory:(id <TProtocolFactory>)protocolFactory
-            processorFactory:(id <TProcessorFactory>)processorFactory;
+#ifndef GNUSTEP
+- (NSFileHandle* _Nullable)fileHandleForPort:(int)port
 {
-  self = [super init];
-
-  _inputProtocolFactory = protocolFactory;
-  _outputProtocolFactory = protocolFactory;
-  _processorFactory = processorFactory;
-
-  dispatch_queue_attr_t processingQueueAttr =
-    dispatch_queue_attr_make_with_qos_class(DISPATCH_QUEUE_CONCURRENT, QOS_CLASS_BACKGROUND, 0);
-
-  _processingQueue = dispatch_queue_create("TSocketServer.processing", processingQueueAttr);
-
   // create a socket.
   int fd = -1;
   CFSocketRef socket = CFSocketCreate(kCFAllocatorDefault, PF_INET, SOCK_STREAM, IPPROTO_TCP, 0, NULL, NULL);
@@ -90,13 +82,68 @@ NSString *const TSockerServerTransportKey = @"TSockerServerTransport";
   }
 
   // wrap it in a file handle so we can get messages from it
-  _socketFileHandle = [[NSFileHandle alloc] initWithFileDescriptor:fd
-                                                    closeOnDealloc:YES];
+  NSFileHandle *h = [[NSFileHandle alloc] initWithFileDescriptor:fd
+												  closeOnDealloc:YES];
 
   // throw away our socket
   CFSocketInvalidate(socket);
   CFRelease(socket);
+  return h;
+}
+#else
+- (NSFileHandle* _Nullable)fileHandleForPort:(int)port
+{
+  struct sockaddr_in addr;
+  memset(&addr, 0, sizeof(addr));
+  addr.sin_family = AF_INET;
+  addr.sin_port = htons(port);
+  addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
+  int fd = socket(addr.sin_family, SOCK_STREAM, IPPROTO_TCP);
+  if (0 == fd) {
+    NSLog(@"TSocketServer: Could not create server socket");
+	return nil;
+  }
+  if (bind(fd, (struct sockaddr*)&addr, sizeof(struct sockaddr_in))) {
+    NSLog(@"TSocketServer: Could not bind to address.");
+	close(fd);
+	return nil;
+  }
+  // backlog of 256 to match CFSocket 
+  if (listen(fd, 256)) {
+	NSLog(@"TSocketServer: Could not listen on socket");
+	close(fd);
+	return nil;
+  }
+  return [[NSFileHandle alloc] initWithFileDescriptor: fd
+									   closeOnDealloc: YES];
+}
+#endif
+
+-(instancetype) initWithPort:(int)port
+             protocolFactory:(id <TProtocolFactory>)protocolFactory
+            processorFactory:(id <TProcessorFactory>)processorFactory;
+{
+  self = [super init];
+
+  _inputProtocolFactory = protocolFactory;
+  _outputProtocolFactory = protocolFactory;
+  _processorFactory = processorFactory;
+
+  dispatch_queue_attr_t processingQueueAttr;
+#ifndef GNUSTEP
+    processingQueueAttr = dispatch_queue_attr_make_with_qos_class(DISPATCH_QUEUE_CONCURRENT, QOS_CLASS_BACKGROUND, 0);
+#else
+  processingQueueAttr = DISPATCH_QUEUE_CONCURRENT;
+#endif
+
+  _processingQueue = dispatch_queue_create("TSocketServer.processing", processingQueueAttr);
+
+  _socketFileHandle = [self fileHandleForPort: port];
+  if (nil == _socketFileHandle)
+    {
+	  return nil;
+	}
   // register for notifications of accepted incoming connections
   [[NSNotificationCenter defaultCenter] addObserver:self
                                            selector:@selector(connectionAccepted:)
