@@ -200,7 +200,8 @@
       "compact",
       "binary",
       "json",
-      "binary:accel"
+      "binary:accel",
+      "compact:accelc"
     ],
     "workdir": "py"
   },
@@ -214,7 +215,6 @@
         "python3",
         "TestServer.py",
         "--verbose",
-        "--libpydir=../../lib/py/build/lib",
         "--genpydir=gen-py"
       ]
     },
@@ -224,7 +224,6 @@
         "python3",
         "TestClient.py",
         "--host=localhost",
-        "--libpydir=../../lib/py/build/lib",
         "--genpydir=gen-py"
       ]
     },
@@ -239,7 +238,9 @@
     "protocols": [
       "compact",
       "binary",
-      "json"
+      "json",
+      "binary:accel",
+      "compact:accelc"
     ],
     "workdir": "py"
   },

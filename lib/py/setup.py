@@ -19,7 +19,6 @@
 # under the License.
 #
 
-import platform
 import sys
 try:
     from setuptools import setup, Extension
@@ -34,7 +33,7 @@ import os
 if 'vagrant' in str(os.environ):
     del os.link
 
-include_dirs = []
+include_dirs = ['src']
 if sys.platform == 'win32':
     include_dirs.append('compat/win32')
     ext_errors = (CCompilerError, DistutilsExecError, DistutilsPlatformError, IOError)
@@ -65,7 +64,12 @@ def run_setup(with_binary):
         extensions = dict(
             ext_modules=[
                 Extension('thrift.protocol.fastbinary',
-                          sources=['src/protocol/fastbinary.c'],
+                          sources=[
+                              'src/ext/module.cpp',
+                              'src/ext/types.cpp',
+                              'src/ext/binary.cpp',
+                              'src/ext/compact.cpp',
+                          ],
                           include_dirs=include_dirs,
                           )
             ],
@@ -103,11 +107,7 @@ def run_setup(with_binary):
           )
 
 try:
-    with_binary = False
-    # Don't even try to build the C module unless we're on CPython 2.x.
-    # TODO: fix it for CPython 3.x
-    if platform.python_implementation() == 'CPython' and sys.version_info < (3,):
-        with_binary = True
+    with_binary = True
     run_setup(with_binary)
 except BuildFailed:
     print()

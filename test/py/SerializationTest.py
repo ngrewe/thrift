@@ -19,7 +19,22 @@
 # under the License.
 #
 
-from ThriftTest.ttypes import *
+from ThriftTest.ttypes import (
+    Bonk,
+    Bools,
+    LargeDeltas,
+    ListBonks,
+    NestedListsBonk,
+    NestedListsI32x2,
+    NestedListsI32x3,
+    NestedMixedx2,
+    Numberz,
+    VersioningTestV1,
+    VersioningTestV2,
+    Xtruct,
+    Xtruct2,
+)
+
 from DebugProtoTest.ttypes import CompactProtoTestStruct, Empty
 from thrift.transport import TTransport
 from thrift.protocol import TBinaryProtocol, TCompactProtocol, TJSONProtocol
@@ -277,11 +292,15 @@ class NormalBinaryTest(AbstractTest):
 
 
 class AcceleratedBinaryTest(AbstractTest):
-    protocol_factory = TBinaryProtocol.TBinaryProtocolAcceleratedFactory()
+    protocol_factory = TBinaryProtocol.TBinaryProtocolAcceleratedFactory(fallback=False)
 
 
 class CompactProtocolTest(AbstractTest):
     protocol_factory = TCompactProtocol.TCompactProtocolFactory()
+
+
+class AcceleratedCompactTest(AbstractTest):
+    protocol_factory = TCompactProtocol.TCompactProtocolAcceleratedFactory(fallback=False)
 
 
 class JSONProtocolTest(AbstractTest):
@@ -361,6 +380,7 @@ def suite():
 
     suite.addTest(loader.loadTestsFromTestCase(NormalBinaryTest))
     suite.addTest(loader.loadTestsFromTestCase(AcceleratedBinaryTest))
+    suite.addTest(loader.loadTestsFromTestCase(AcceleratedCompactTest))
     suite.addTest(loader.loadTestsFromTestCase(CompactProtocolTest))
     suite.addTest(loader.loadTestsFromTestCase(JSONProtocolTest))
     suite.addTest(loader.loadTestsFromTestCase(AcceleratedFramedTest))

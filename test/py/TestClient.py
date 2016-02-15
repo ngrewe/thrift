@@ -26,9 +26,9 @@ import time
 import unittest
 from optparse import OptionParser
 
+from util import local_libpath
+
 SCRIPT_DIR = os.path.abspath(os.path.dirname(__file__))
-ROOT_DIR = os.path.dirname(os.path.dirname(SCRIPT_DIR))
-DEFAULT_LIBDIR_GLOB = os.path.join(ROOT_DIR, 'lib', 'py', 'build', 'lib.*')
 
 
 class AbstractTest(unittest.TestCase):
@@ -268,7 +268,12 @@ class JSONTest(AbstractTest):
 
 class AcceleratedBinaryTest(AbstractTest):
     def get_protocol(self, transport):
-        return TBinaryProtocol.TBinaryProtocolAcceleratedFactory().getProtocol(transport)
+        return TBinaryProtocol.TBinaryProtocolAcceleratedFactory(fallback=False).getProtocol(transport)
+
+
+class AcceleratedCompactTest(AbstractTest):
+    def get_protocol(self, transport):
+        return TCompactProtocol.TCompactProtocolAcceleratedFactory(fallback=False).getProtocol(transport)
 
 
 def suite():
@@ -280,6 +285,8 @@ def suite():
         suite.addTest(loader.loadTestsFromTestCase(AcceleratedBinaryTest))
     elif options.proto == 'compact':
         suite.addTest(loader.loadTestsFromTestCase(CompactTest))
+    elif options.proto == 'accelc':
+        suite.addTest(loader.loadTestsFromTestCase(AcceleratedCompactTest))
     elif options.proto == 'json':
         suite.addTest(loader.loadTestsFromTestCase(JSONTest))
     else:
@@ -326,10 +333,7 @@ if __name__ == "__main__":
 
     if options.genpydir:
         sys.path.insert(0, os.path.join(SCRIPT_DIR, options.genpydir))
-    if options.libpydir:
-        sys.path.insert(0, glob.glob(options.libpydir)[0])
-    else:
-        sys.path.insert(0, glob.glob(DEFAULT_LIBDIR_GLOB)[0])
+    sys.path.insert(0, local_libpath())
 
     from ThriftTest import ThriftTest
     from ThriftTest.ttypes import Xtruct, Xtruct2, Numberz, Xception, Xception2

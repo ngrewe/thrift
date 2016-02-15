@@ -50,83 +50,74 @@ public:
                  const std::map<std::string, std::string>& parsed_options,
                  const std::string& option_string)
     : t_generator(program) {
-    (void)option_string;
     std::map<std::string, std::string>::const_iterator iter;
 
-    iter = parsed_options.find("new_style");
-    if (iter != parsed_options.end()) {
-      pwarning(0, "new_style is enabled by default, so the option will be removed in the near future.\n");
-    }
-    iter = parsed_options.find("utf8strings");
-    if (iter != parsed_options.end()) {
-      pwarning(0, "utf8strings is enabled by default, so the option will be removed in the near future.\n");
-    }
 
     gen_newstyle_ = true;
-    iter = parsed_options.find("old_style");
-    if (iter != parsed_options.end()) {
-      gen_newstyle_ = false;
-      pwarning(0, "old_style is deprecated and may be removed in the future.\n");
+    gen_utf8strings_ = true;
+    gen_dynbase_ = false;
+    gen_slots_ = false;
+    gen_tornado_ = false;
+    gen_twisted_ = false;
+    gen_dynamic_ = false;
+    coding_ = "";
+    gen_dynbaseclass_ = "";
+    gen_dynbaseclass_exc_ = "";
+    gen_dynbaseclass_frozen_ = "";
+    import_dynbase_ = "";
+    package_prefix_ = "";
+    for( iter = parsed_options.begin(); iter != parsed_options.end(); ++iter) {
+      if( iter->first.compare("new_style") == 0) {
+        pwarning(0, "new_style is enabled by default, so the option will be removed in the near future.\n");
+      } else if( iter->first.compare("old_style") == 0) {
+        gen_newstyle_ = false;
+        pwarning(0, "old_style is deprecated and may be removed in the future.\n");
+      } else if( iter->first.compare("utf8strings") == 0) {
+        pwarning(0, "utf8strings is enabled by default, so the option will be removed in the near future.\n");
+      } else if( iter->first.compare("no_utf8strings") == 0) {
+        gen_utf8strings_ = false;
+      } else if( iter->first.compare("slots") == 0) {
+        gen_slots_ = true;
+      } else if( iter->first.compare("package_prefix") == 0) {
+        package_prefix_ = iter->second;
+      } else if( iter->first.compare("dynamic") == 0) {
+        gen_dynamic_ = true;
+        gen_newstyle_ = false; // dynamic is newstyle
+        if( gen_dynbaseclass_.empty()) {
+          gen_dynbaseclass_ = "TBase";
+        }
+        if( gen_dynbaseclass_frozen_.empty()) {
+          gen_dynbaseclass_frozen_ = "TFrozenBase";
+        }
+        if( gen_dynbaseclass_exc_.empty()) {
+          gen_dynbaseclass_exc_ = "TExceptionBase";
+        }
+        if( import_dynbase_.empty()) {
+          import_dynbase_ = "from thrift.protocol.TBase import TBase, TFrozenBase, TExceptionBase, TTransport\n";
+        }
+      } else if( iter->first.compare("dynbase") == 0) {
+        gen_dynbase_ = true;
+        gen_dynbaseclass_ = (iter->second);
+      } else if( iter->first.compare("dynfrozen") == 0) {
+        gen_dynbaseclass_frozen_ = (iter->second);
+      } else if( iter->first.compare("dynexc") == 0) {
+        gen_dynbaseclass_exc_ = (iter->second);
+      } else if( iter->first.compare("dynimport") == 0) {
+        gen_dynbase_ = true;
+        import_dynbase_ = (iter->second);
+      } else if( iter->first.compare("twisted") == 0) {
+        gen_twisted_ = true;
+      } else if( iter->first.compare("tornado") == 0) {
+        gen_tornado_ = true;
+      } else if( iter->first.compare("coding") == 0) {
+        coding_ = iter->second;
+      } else {
+        throw "unknown option py:" + iter->first; 
+      }
     }
-
-    iter = parsed_options.find("slots");
-    gen_slots_ = (iter != parsed_options.end());
-
-    iter = parsed_options.find("package_prefix");
-    if (iter != parsed_options.end()) {
-      package_prefix_ = iter->second;
-    }
-
-
-    iter = parsed_options.find("dynamic");
-    gen_dynamic_ = (iter != parsed_options.end());
-
-    if (gen_dynamic_) {
-      gen_newstyle_ = false; // dynamic is newstyle
-      gen_dynbaseclass_ = "TBase";
-      gen_dynbaseclass_frozen_ = "TFrozenBase";
-      gen_dynbaseclass_exc_ = "TExceptionBase";
-      import_dynbase_ = "from thrift.protocol.TBase import TBase, TFrozenBase, TExceptionBase, TTransport\n";
-    }
-
-    iter = parsed_options.find("dynbase");
-    if (iter != parsed_options.end()) {
-      gen_dynbase_ = true;
-      gen_dynbaseclass_ = (iter->second);
-    }
-
-    iter = parsed_options.find("dynfrozen");
-    if (iter != parsed_options.end()) {
-      gen_dynbaseclass_frozen_ = (iter->second);
-    }
-
-    iter = parsed_options.find("dynexc");
-    if (iter != parsed_options.end()) {
-      gen_dynbaseclass_exc_ = (iter->second);
-    }
-
-    iter = parsed_options.find("dynimport");
-    if (iter != parsed_options.end()) {
-      gen_dynbase_ = true;
-      import_dynbase_ = (iter->second);
-    }
-
-    iter = parsed_options.find("twisted");
-    gen_twisted_ = (iter != parsed_options.end());
-
-    iter = parsed_options.find("tornado");
-    gen_tornado_ = (iter != parsed_options.end());
 
     if (gen_twisted_ && gen_tornado_) {
       throw "at most one of 'twisted' and 'tornado' are allowed";
-    }
-
-    iter = parsed_options.find("no_utf8strings");
-    gen_utf8strings_ = (iter == parsed_options.end());
-
-    iter = parsed_options.find("coding");
-    if (iter != parsed_options.end()) {
-        coding_ = iter->second;
     }
 
     copy_options_ = option_string;
@@ -241,7 +232,6 @@ public:
   std::string py_autogen_comment();
   std::string py_imports();
   std::string render_includes();
-  std::string render_fastbinary_includes();
   std::string declare_argument(t_field* tfield);
   std::string render_field_default_value(t_field* tfield);
   std::string type_name(t_type* ttype);
@@ -384,11 +374,11 @@ void t_py_generator::init_generator() {
   f_init.close();
 
   // Print header
-  f_types_ <<
-    py_autogen_comment() << endl <<
-    py_imports() << endl <<
-    render_includes() << endl <<
-    render_fastbinary_includes();
+  f_types_ << py_autogen_comment() << endl
+           << py_imports() << endl
+           << render_includes() << endl
+           << "from thrift.transport import TTransport" << endl
+           << import_dynbase_;
 
   f_consts_ <<
     py_autogen_comment() << endl <<
@@ -406,24 +396,6 @@ string t_py_generator::render_includes() {
     result += "import " + get_real_py_module(includes[i], gen_twisted_, package_prefix_) + ".ttypes\n";
   }
   return result;
-}
-
-/**
- * Renders all the imports necessary to use the accelerated TBinaryProtocol
- */
-string t_py_generator::render_fastbinary_includes() {
-  string hdr = "";
-  if (gen_dynamic_) {
-    hdr += std::string(import_dynbase_);
-  } else {
-    hdr += "from thrift.transport import TTransport\n"
-           "from thrift.protocol import TBinaryProtocol, TProtocol\n"
-           "try:\n" +
-           indent_str() + "from thrift.protocol import fastbinary\n"
-           "except:\n" +
-           indent_str() + "fastbinary = None\n";
-  }
-  return hdr;
 }
 
 /**
@@ -902,19 +874,16 @@ void t_py_generator::generate_py_struct_reader(ofstream& out, t_struct* tstruct)
 
   const char* id = is_immutable(tstruct) ? "cls" : "self";
 
-  indent(out) << "if iprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated "
+  indent(out) << "if iprot._fast_decode is not None "
                  "and isinstance(iprot.trans, TTransport.CReadableTransport) "
-                 "and " << id << ".thrift_spec is not None "
-                 "and fastbinary is not None:" << endl;
+                 "and "
+              << id << ".thrift_spec is not None:" << endl;
   indent_up();
 
   if (is_immutable(tstruct)) {
-    indent(out)
-        << "return fastbinary.decode_binary(None, iprot.trans, (cls, cls.thrift_spec), iprot.string_length_limit, iprot.container_length_limit)"
-        << endl;
+    indent(out) << "return iprot._fast_decode(None, iprot, (cls, cls.thrift_spec))" << endl;
   } else {
-    indent(out) << "fastbinary.decode_binary(self, iprot.trans, (self.__class__, self.thrift_spec), iprot.string_length_limit, iprot.container_length_limit)"
-                << endl;
+    indent(out) << "iprot._fast_decode(self, iprot, (self.__class__, self.thrift_spec))" << endl;
     indent(out) << "return" << endl;
   }
   indent_down();
@@ -991,13 +960,11 @@ void t_py_generator::generate_py_struct_writer(ofstream& out, t_struct* tstruct)
   indent(out) << "def write(self, oprot):" << endl;
   indent_up();
 
-  indent(out) << "if oprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated "
-                 "and self.thrift_spec is not None "
-                 "and fastbinary is not None:" << endl;
+  indent(out) << "if oprot._fast_encode is not None and self.thrift_spec is not None:" << endl;
   indent_up();
 
   indent(out)
-      << "oprot.trans.write(fastbinary.encode_binary(self, (self.__class__, self.thrift_spec)))"
+      << "oprot.trans.write(oprot._fast_encode(self, (self.__class__, self.thrift_spec)))"
       << endl;
   indent(out) << "return" << endl;
   indent_down();
@@ -1074,7 +1041,8 @@ void t_py_generator::generate_service(t_service* tservice) {
   f_service_ << "import logging" << endl
              << "from .ttypes import *" << endl
              << "from thrift.Thrift import TProcessor" << endl
-             << render_fastbinary_includes();
+             << "from thrift.transport import TTransport" << endl
+             << import_dynbase_;
 
   if (gen_twisted_) {
     f_service_ << "from zope.interface import Interface, implements" << endl
@@ -1546,11 +1514,8 @@ void t_py_generator::generate_service_remote(t_service* tservice) {
     indent_str() << "from urllib.parse import urlparse" << endl <<
     "else:" << endl <<
     indent_str() << "from urlparse import urlparse" << endl <<
-    "from thrift.transport import TTransport" << endl <<
-    "from thrift.transport import TSocket" << endl <<
-    "from thrift.transport import TSSLSocket" << endl <<
-    "from thrift.transport import THttpClient" << endl <<
-    "from thrift.protocol import TBinaryProtocol" << endl <<
+    "from thrift.transport import TTransport, TSocket, TSSLSocket, THttpClient" << endl <<
+    "from thrift.protocol.TBinaryProtocol import TBinaryProtocol" << endl <<
     endl;
 
   f_remote <<
@@ -1635,7 +1600,7 @@ void t_py_generator::generate_service_remote(t_service* tservice) {
            << indent_str() << indent_str() << "transport = TTransport.TFramedTransport(socket)" << endl
            << indent_str() << "else:" << endl
            << indent_str() << indent_str() << "transport = TTransport.TBufferedTransport(socket)" << endl
-           << "protocol = TBinaryProtocol.TBinaryProtocol(transport)" << endl
+           << "protocol = TBinaryProtocol(transport)" << endl
            << "client = " << service_name_ << ".Client(protocol)" << endl
            << "transport.open()" << endl
            << endl;
