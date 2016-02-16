@@ -114,6 +114,15 @@ find_package(Cabal QUIET)
 CMAKE_DEPENDENT_OPTION(BUILD_HASKELL "Build GHC library" ON
                        "BUILD_LIBRARIES;WITH_HASKELL;GHC_FOUND;CABAL_FOUND" OFF)
 
+
+option(WITH_COCOA "Build Objective-C (Cocoa) Thrift library" ON)
+if(NOT APPLE)
+  find_package(Libdispatch QUIET)
+  find_package(GNUstep)
+endif()
+CMAKE_DEPENDENT_OPTION(BUILD_COCOA "Build Objective-C (Cocoa) Thrift library" ON
+                       "BUILD_LIBRARIES;WITH_COCOA;APPLE OR Libdispatch_FOUND;APPLE OR GNUstep_FOUND" OFF)
+
 # Common library options
 option(WITH_SHARED_LIB "Build shared libraries" ON)
 option(WITH_STATIC_LIB "Build static libraries" ON)
@@ -169,6 +178,12 @@ message(STATUS "  Build Haskell library:                      ${BUILD_HASKELL}")
 MESSAGE_DEP(WITH_HASKELL "Disabled by via WITH_HASKELL=OFF")
 MESSAGE_DEP(GHC_FOUND "GHC missing")
 MESSAGE_DEP(CABAL_FOUND "Cabal missing")
+message(STATUS "  Build Objective-C (Cocoa) library:          ${BUILD_COCOA}")
+MESSAGE_DEP(WITH_COCOA "Disabled by via WITH_COCOA=OFF")
+if(NOT APPLE)
+    MESSAGE_DEP(Libdispatch_FOUND "libdispatch missing")
+    MESSAGE_DEP(GNUstep_FOUND "GNUstep missing")
+endif()
 message(STATUS " Library features:")
 message(STATUS "  Build shared libraries:                     ${WITH_SHARED_LIB}")
 message(STATUS "  Build static libraries:                     ${WITH_STATIC_LIB}")

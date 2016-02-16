@@ -111,4 +111,7 @@ if(BUILD_HASKELL)
     endif()
 endif()
 
+if(BUILD_COCOA)
+    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/lib/cocoa)
+endif()
 PRINT_CONFIG_SUMMARY()
