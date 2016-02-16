@@ -1,9 +1,13 @@
-# find LibDispatch
+# find GNUstep
 #
 # Usage:
-# LIBDISPATCH_INCLUDE_DIRS, where to find LibDispatch headers
-# LIBDISPATCH_LIBRARIES, LibDispatch libraries
-# Libdispatch_FOUND, If false, do not try to use libdispatch
+# GNUSTEP_CONFIG: Where to find the configuration utility
+# GNUSTEP_OBJC_FLAGS: Compiler flags for compiling Objective-C code
+# GNUSTEP_LINKER_FLAGS: Linker flags for linking Objective-C code
+# GNUSTEP_INSTALL_TYPE: The GNUstep installation domain to use. NONE or LOCAL
+# is best for most people.
+#
+# GNUstep_FOUND, If false, we can't build the Objective-C library
 
 set(GNUstep_EXTRA_PREFIXES /usr/local /opt/local "$ENV{HOME}" )
 find_program(GNUSTEP_CONFIG gnustep-config
