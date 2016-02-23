@@ -13,7 +13,7 @@
 # Apache Thrift Docker build environment for Centos
 #
 # Known missing client libraries:
-#  - Haskell
+#  - None
 
 FROM debian:jessie
 MAINTAINER Apache Thrift <dev@thrift.apache.org>
@@ -106,15 +106,9 @@ ENV PATH /usr/local/go/bin:$PATH
 
 
 # Haskell dependencies
-#RUN apt-get update && apt-get install -y \
-#      ghc \
-#      cabal-install \
-#      libghc-binary-dev \
-#      libghc-network-dev \
-#      libghc-http-dev \
-#      libghc-hashable-dev \
-#      libghc-unordered-containers-dev \
-#      libghc-vector-dev
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      ghc \
+      cabal-install
 
 # Haxe
 RUN apt-get update && apt-get install -y \
@@ -149,14 +143,12 @@ RUN apt-get update && apt-get install -y \
       mono-xbuild
 
 # D dependencies
-# THRIFT-2916: DMD pinned to 2.065.0-0 due to regression in 2.066
-# THRIFT-3253: DMD pinned to 2.065.0-0 due to deprecations 2.067.1
 RUN apt-get update && apt-get install -y \
       gcc-multilib \
       xdg-utils \
-    && curl -sSL http://downloads.dlang.org/releases/2.x/2.065.0/dmd_2.065.0-0_amd64.deb -o /tmp/dmd_2.065.0-0_amd64.deb && \
-    dpkg -i /tmp/dmd_2.065.0-0_amd64.deb && \
-    rm /tmp/dmd_2.065.0-0_amd64.deb
+    && curl -sSL http://downloads.dlang.org/releases/2.x/2.070.0/dmd_2.070.0-0_amd64.deb -o /tmp/dmd_2.070.0-0_amd64.deb && \
+    dpkg -i /tmp/dmd_2.070.0-0_amd64.deb && \
+    rm /tmp/dmd_2.070.0-0_amd64.deb
 
 # Dart dependencies
 RUN curl https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - && \
@@ -182,6 +174,9 @@ RUN apt-get clean && \
     rm -rf /var/lib/apt/lists/* && \
     rm -rf /tmp/* && \
     rm -rf /var/tmp/*
+
+# Force utf8 locale to successfully build Haskell tf-random
+ENV LC_ALL C.UTF-8
 
 ENV THRIFT_ROOT /thrift
 RUN mkdir -p $THRIFT_ROOT/src
