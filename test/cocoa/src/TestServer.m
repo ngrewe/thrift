@@ -31,8 +31,14 @@
 #include <getopt.h>
 #include <string.h>
 
-// Length of argv[0] - Length of script dir
-#define EXECUTABLE_FILE_NAME_LENGTH 19
+#define TEST_BASETYPES     1  // 0000 0001
+#define TEST_STRUCTS       2  // 0000 0010
+#define TEST_CONTAINERS    4  // 0000 0100
+#define TEST_EXCEPTIONS    8  // 0000 1000
+#define TEST_UNKNOWN      64  // 0100 0000 (Failed to prepare environemt etc.)
+#define TEST_TIMEOUT     128  // 1000 0000
+#define TEST_NOTUSED      48  // 0011 0000 (reserved bits)
+
 
 @interface TestHandler : NSObject <ThriftTestThriftTest>
 
@@ -568,9 +574,15 @@ int main(int argc, char** argv) {
       printf("TODO: Print help\n");
       return 0;
     }
-    id server = [ServerFactory serverFromDefaults];
+
+    id server = nil;
+    @try {
+      server = [ServerFactory serverFromDefaults];
+    } @catch (NSException *e) {
+      fprintf(stderr, "Could not create server: %s\n", [[e reason] UTF8String]);
+    }
     if (server == nil) {
-      return 1;
+      return TEST_UNKNOWN;
     }
     NSRunLoop *rl = [NSRunLoop currentRunLoop];
     while (1) {
