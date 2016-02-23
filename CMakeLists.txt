@@ -113,5 +113,8 @@ endif()
 
 if(BUILD_COCOA)
     add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/lib/cocoa)
+	if(BUILD_TESTING)
+	  add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/test/cocoa)
+	endif()
 endif()
 PRINT_CONFIG_SUMMARY()
