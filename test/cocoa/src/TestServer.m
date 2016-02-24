@@ -325,15 +325,15 @@
         *__thriftError = [[ThriftTestXception alloc] initWithErrorCode: 1001
                                                                message: arg];
       }
-      return false;
+      return NO;
     } else if ([arg isEqualToString: @"TException"]) {
       if (NULL != __thriftError) {
         *__thriftError = [NSError errorWithType: TApplicationErrorUnknown
                                          reason: @""];
       }
-      return false;
+      return NO;
     }
-    return true;
+    return YES;
 }
 
 - (ThriftTestXtruct *) testMultiException: (NSString *) arg0

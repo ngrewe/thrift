@@ -36,7 +36,7 @@ extern NSString *const TSockerServerTransportKey;
 
 
 @interface TSocketServer : NSObject
-
+@property (nonatomic,readwrite) NSTimeInterval connectionTimeout;
 -(instancetype) initWithPort:(int)port
              protocolFactory:(id <TProtocolFactory>)protocolFactory
             processorFactory:(id <TProcessorFactory>)processorFactory;

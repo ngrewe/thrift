@@ -19,7 +19,7 @@
 
 #import <Foundation/Foundation.h>
 #import "TSocketServer.h"
-#import "TNSFileHandleTransport.h"
+#import "TNSStreamTransport.h"
 #import "TProtocol.h"
 #import "TTransportError.h"
 
@@ -36,28 +36,216 @@ NSString *const TSocketServerClientConnectionFinished = @"TSocketServerClientCon
 NSString *const TSocketServerProcessorKey = @"TSocketServerProcessor";
 NSString *const TSockerServerTransportKey = @"TSockerServerTransport";
 
+@class TSocketStreamHolder;
 
-@interface TSocketServer ()
+@protocol TSocketStreamHolderDelegate <NSObject>
 
+- (void)streamHolderDone: (TSocketStreamHolder*)holder;
+@end
+
+@interface TSocketServer () <TSocketStreamHolderDelegate>
+{
+#ifndef GNUSTEP
+  CFSocketRef _serverSocket;
+  CFRunLoopSourceRef _source;
+#else
+
+#endif
+  NSTimer *housekeeping;
+}
 @property(strong, nonatomic) id<TProtocolFactory> inputProtocolFactory;
 @property(strong, nonatomic) id<TProtocolFactory> outputProtocolFactory;
 @property(strong, nonatomic) id<TProcessorFactory> processorFactory;
 @property(strong, nonatomic) NSFileHandle *socketFileHandle;
 @property(strong, nonatomic) dispatch_queue_t processingQueue;
+@property(strong,nonatomic) NSMutableArray<TSocketStreamHolder*> *clients;
 
+- (void) _scheduleInputStream: (NSInputStream*)iStream
+                 outputStream: (NSOutputStream*)oStream;
 @end
 
+@interface TNSStreamTransport () <NSStreamDelegate>
+@end
+
+
+@interface TSocketStreamHolder : NSObject <NSStreamDelegate>
+@property (weak, readonly) TSocketServer *server;
+@property (nonatomic,readwrite) NSDate* lastUsed;
+@property (nonatomic,readonly) TNSStreamTransport *transport;
+@property (readwrite,getter=isProcessing) BOOL processing;
+@end
+
+
+@implementation TSocketStreamHolder
+
+- (NSComparisonResult) compare: (TSocketStreamHolder*)other
+{
+  return [[self lastUsed] compare: [other lastUsed]];
+}
+
+- (void)closeStreamsAndNotify
+{
+
+  __weak TSocketStreamHolder* wSelf = self;
+  [_transport close];
+  dispatch_async(dispatch_get_main_queue(), ^{
+    [_server streamHolderDone: wSelf];
+  });
+}
+
+- (BOOL) checkStreamStatus
+{
+  __weak TSocketStreamHolder* wSelf = self;
+  NSInputStream *iStream = [_transport input];
+  if (([iStream streamStatus] > NSStreamStatusWriting)
+    || ([iStream streamStatus] < NSStreamStatusOpening)) {
+    [self closeStreamsAndNotify];
+    return NO;
+  }
+  return YES;
+}
+
+
+- (void) rescheduleDelegate: (id<NSStreamDelegate>)delegate
+                     onMain: (BOOL)newIsMain
+{
+  NSRunLoop *oldLoop = nil;
+  NSRunLoop *newLoop = nil;
+  if (newIsMain) {
+    oldLoop = [NSRunLoop currentRunLoop];
+    newLoop = [NSRunLoop mainRunLoop];
+  } else {
+    oldLoop = [NSRunLoop mainRunLoop];
+    newLoop = [NSRunLoop currentRunLoop];
+  }
+  NSStream *iStream = [_transport input];
+  NSStream *oStream = [_transport output];
+  [iStream setDelegate: delegate];
+  [iStream removeFromRunLoop: oldLoop forMode: NSDefaultRunLoopMode];
+  [oStream removeFromRunLoop: oldLoop forMode: NSDefaultRunLoopMode];
+  [iStream scheduleInRunLoop: newLoop forMode: NSDefaultRunLoopMode];
+  [oStream scheduleInRunLoop: newLoop forMode: NSDefaultRunLoopMode];
+
+}
+
+- (instancetype)initWithServer: (TSocketServer*)server
+                   inputStream: (NSInputStream*)iStream
+                  outputStream: (NSOutputStream*)oStream
+{
+  if (nil == (self = [super init])) {
+    return nil;
+  }
+  _server = server;
+  _transport = [[TNSStreamTransport alloc] initWithInputStream: iStream
+                                                  outputStream: oStream];
+  _lastUsed = [NSDate date];
+  [self rescheduleDelegate: self onMain: YES];
+  return self;
+}
+
+- (void) handleMessage
+{
+  @autoreleasepool {
+    [self rescheduleDelegate: _transport
+                      onMain: NO];
+    id<TProcessor> processor = [[_server processorFactory] processorForTransport: _transport];
+
+    id <TProtocol> inProtocol = [[_server inputProtocolFactory] newProtocolOnTransport: _transport];
+    id <TProtocol> outProtocol = [[_server outputProtocolFactory] newProtocolOnTransport: _transport];
+
+    NSError *error;
+    if (![processor processOnInputProtocol:inProtocol outputProtocol:outProtocol error:&error]) {
+      // Handle error
+      NSLog(@"Error processing request: %@", error);
+      [self closeStreamsAndNotify];
+    } else if ([self checkStreamStatus]) {
+        [self setLastUsed: [NSDate date]];
+        [self rescheduleDelegate: self
+                          onMain: YES];
+      }
+    dispatch_sync(dispatch_get_main_queue(), ^{
+      [self setProcessing: NO];
+    });
+  }
+
+}
+
+- (void)dispatchMessage
+{
+  TSocketServer *s = [self server];
+  if (nil == s) {
+    [self closeStreamsAndNotify];
+    return;
+  }
+  [self setProcessing: YES];
+  dispatch_async([s processingQueue], ^{
+     [self handleMessage];
+  });
+}
+
+- (void)stream: (NSStream*)iStream handleEvent: (NSStreamEvent)event
+{
+  switch (event) {
+    case NSStreamEventHasBytesAvailable:
+      [self dispatchMessage];
+      break;
+    case NSStreamEventErrorOccurred:
+    case NSStreamEventEndEncountered:
+      [self closeStreamsAndNotify];
+      break;
+    default:
+     //ignore
+     break;
+  }
+}
+@end
+
+
+
+CFStringRef TCreateServerDescription(const void* retainedServer)
+{
+  NSString *s = [(__bridge TSocketServer*)retainedServer description];
+  return (__bridge_retained CFStringRef)s;
+}
+
+void TOnSocketAcceptForLiveServer(CFSocketRef sock, CFSocketCallBackType ty,
+  CFDataRef addr, const void *nativeHandlePtr, void *retainedServer)
+{
+  if (ty != kCFSocketAcceptCallBack) {
+    return;
+  }
+
+  CFReadStreamRef iStream = NULL;
+  CFWriteStreamRef oStream = NULL;
+  CFStreamCreatePairWithSocket(kCFAllocatorDefault,
+    *(CFSocketNativeHandle*)nativeHandlePtr, &iStream, &oStream);
+  TSocketServer *server = (__bridge TSocketServer*)retainedServer;
+  if (iStream && oStream) {
+
+    CFReadStreamSetProperty(iStream, kCFStreamPropertyShouldCloseNativeSocket,
+      kCFBooleanTrue);
+    CFWriteStreamSetProperty(oStream, kCFStreamPropertyShouldCloseNativeSocket,
+      kCFBooleanTrue);
+    [server _scheduleInputStream: (__bridge_transfer NSInputStream*)iStream
+                    outputStream: (__bridge_transfer NSOutputStream*)oStream];
+  } else {
+    NSLog(@"Error getting streams");
+  }
+
+}
 
 @implementation TSocketServer
 
 #ifndef GNUSTEP
-- (NSFileHandle* _Nullable)fileHandleForPort:(int)port
+- (BOOL) scheduleServerSocketOnPort:(int)port
 {
   // create a socket.
   int fd = -1;
-  CFSocketRef socket = CFSocketCreate(kCFAllocatorDefault, PF_INET, SOCK_STREAM, IPPROTO_TCP, 0, NULL, NULL);
+  const CFSocketContext ctx = { 0, (__bridge void*)self, NULL, NULL, TCreateServerDescription };
+
+  CFSocketRef socket = CFSocketCreate(kCFAllocatorDefault, PF_INET, SOCK_STREAM,
+    IPPROTO_TCP, kCFSocketAcceptCallBack, TOnSocketAcceptForLiveServer, &ctx);
   if (socket) {
-    CFSocketSetSocketFlags(socket, CFSocketGetSocketFlags(socket) & ~kCFSocketCloseOnInvalidate);
     fd = CFSocketGetNative(socket);
     int yes = 1;
     setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, (void *)&yes, sizeof(yes));
@@ -73,22 +261,30 @@ NSString *const TSockerServerTransportKey = @"TSockerServerTransport";
       CFSocketInvalidate(socket);
       CFRelease(socket);
       NSLog(@"TSocketServer: Could not bind to address");
-      return nil;
+      return NO;
     }
-  }
-  else {
+  } else {
     NSLog(@"TSocketServer: No server socket");
-    return nil;
+    return NO;
   }
+  _serverSocket = socket;
+  _source = CFSocketCreateRunLoopSource(
+    kCFAllocatorDefault,
+    _serverSocket, 0);
+  CFRunLoopAddSource(
+    CFRunLoopGetCurrent(),
+    _source,
+    kCFRunLoopDefaultMode);
+  return YES;
+}
 
-  // wrap it in a file handle so we can get messages from it
-  NSFileHandle *h = [[NSFileHandle alloc] initWithFileDescriptor:fd
-												  closeOnDealloc:YES];
-
-  // throw away our socket
-  CFSocketInvalidate(socket);
-  CFRelease(socket);
-  return h;
+- (void)deallocServerSocket
+{
+  CFRunLoopRemoveSource(CFRunLoopGetMain(),
+    _source, kCFRunLoopDefaultMode);
+  CFRelease(_source);
+  CFSocketInvalidate(_serverSocket);
+  CFRelease(_serverSocket);
 }
 #else
 - (NSFileHandle* _Nullable)fileHandleForPort:(int)port
@@ -109,7 +305,7 @@ NSString *const TSockerServerTransportKey = @"TSockerServerTransport";
 	close(fd);
 	return nil;
   }
-  // backlog of 256 to match CFSocket 
+  // backlog of 256 to match CFSocket
   if (listen(fd, 256)) {
 	NSLog(@"TSocketServer: Could not listen on socket");
 	close(fd);
@@ -120,16 +316,37 @@ NSString *const TSockerServerTransportKey = @"TSockerServerTransport";
 }
 #endif
 
+- (void)_purgeStaleConnections: (NSTimer*)t
+{
+  NSMutableArray<TSocketStreamHolder*>* toPurge = nil;
+  NSDate *now = [NSDate date];
+  for (TSocketStreamHolder *h in _clients) {
+    if (![h isProcessing]
+      && [now timeIntervalSinceDate: [h lastUsed]] > _connectionTimeout)
+    {
+      if (nil == toPurge) {
+        toPurge = [NSMutableArray array];
+      }
+      [toPurge addObject: h];
+    }
+  }
+  if ([toPurge count] != 0) {
+    [_clients removeObjectsInArray: toPurge];
+    [toPurge removeAllObjects];
+  }
+}
+
 -(instancetype) initWithPort:(int)port
              protocolFactory:(id <TProtocolFactory>)protocolFactory
             processorFactory:(id <TProcessorFactory>)processorFactory;
 {
-  self = [super init];
-
+  if (nil == (self = [super init])) {
+    return nil;
+  }
   _inputProtocolFactory = protocolFactory;
   _outputProtocolFactory = protocolFactory;
   _processorFactory = processorFactory;
-
+  _connectionTimeout = 60.0f;
   dispatch_queue_attr_t processingQueueAttr;
 #ifndef GNUSTEP
     processingQueueAttr = dispatch_queue_attr_make_with_qos_class(DISPATCH_QUEUE_CONCURRENT, QOS_CLASS_BACKGROUND, 0);
@@ -138,74 +355,50 @@ NSString *const TSockerServerTransportKey = @"TSockerServerTransport";
 #endif
 
   _processingQueue = dispatch_queue_create("TSocketServer.processing", processingQueueAttr);
-
-  _socketFileHandle = [self fileHandleForPort: port];
-  if (nil == _socketFileHandle)
-    {
-	  return nil;
-	}
-  // register for notifications of accepted incoming connections
-  [[NSNotificationCenter defaultCenter] addObserver:self
-                                           selector:@selector(connectionAccepted:)
-                                               name:NSFileHandleConnectionAcceptedNotification
-                                             object:_socketFileHandle];
-
-  // tell socket to listen
-  [_socketFileHandle acceptConnectionInBackgroundAndNotify];
-
-  NSLog(@"TSocketServer: Listening on TCP port %d", port);
-
+  _clients = [NSMutableArray new];
+  if ([self scheduleServerSocketOnPort: port]) {
+      NSLog(@"TSocketServer: Listening on TCP port %d", port);
+  } else {
+    self = nil;
+  }
+  housekeeping = [NSTimer scheduledTimerWithTimeInterval: 1.0f
+                                                  target: self
+                                                selector: @selector(_purgeStaleConnections:)
+                                                userInfo: nil
+                                                 repeats: YES];
   return self;
 }
 
 
+
 -(void) dealloc
 {
+  [housekeeping invalidate];
+  [self deallocServerSocket];
   [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
-
--(void) connectionAccepted:(NSNotification *)notification
+- (void)streamHolderDone: (TSocketStreamHolder*)holder
 {
-  NSFileHandle *socket = [notification.userInfo objectForKey:NSFileHandleNotificationFileHandleItem];
-
-  // Now that we have a client connected, handle request on queue
-  dispatch_async(_processingQueue, ^{
-
-    [self handleClientConnection:socket];
-
+  dispatch_async(dispatch_get_main_queue(), ^{
+    [NSNotificationCenter.defaultCenter postNotificationName:TSocketServerClientConnectionFinished
+                                                      object:self
+                                                    userInfo:@{TSocketServerProcessorKey: [NSNull null],
+                                                               TSockerServerTransportKey: [holder transport]}
+    ];
   });
 
-  // Continue accepting connections
-  [_socketFileHandle acceptConnectionInBackgroundAndNotify];
 }
 
-
--(void) handleClientConnection:(NSFileHandle *)clientSocket
+- (void) _scheduleInputStream: (NSInputStream*)iStream
+                 outputStream: (NSOutputStream*)oStream
 {
-  @autoreleasepool {
-
-    TNSFileHandleTransport *transport = [[TNSFileHandleTransport alloc] initWithFileHandle:clientSocket];
-    id<TProcessor> processor = [_processorFactory processorForTransport:transport];
-
-    id <TProtocol> inProtocol = [_inputProtocolFactory newProtocolOnTransport:transport];
-    id <TProtocol> outProtocol = [_outputProtocolFactory newProtocolOnTransport:transport];
-
-    NSError *error;
-    if (![processor processOnInputProtocol:inProtocol outputProtocol:outProtocol error:&error]) {
-      // Handle error
-      NSLog(@"Error processing request: %@", error);
-    }
-
-    dispatch_async(dispatch_get_main_queue(), ^{
-
-      [NSNotificationCenter.defaultCenter postNotificationName:TSocketServerClientConnectionFinished
-                                                        object:self
-                                                      userInfo:@{TSocketServerProcessorKey: processor,
-                                                                 TSockerServerTransportKey: transport}];
-    });
-
-  }
+  [iStream open];
+  [oStream open];
+  TSocketStreamHolder *holder = [[TSocketStreamHolder alloc] initWithServer: self
+                                                                inputStream: iStream
+                                                               outputStream: oStream];
+  [_clients addObject: holder];
 }
 
 @end
