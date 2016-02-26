@@ -192,6 +192,11 @@ NSString *const TSockerServerTransportKey = @"TSockerServerTransport";
     return;
   }
   __sync_bool_compare_and_swap(&_processing, NO, YES);
+  NSRunLoop *rl = [NSRunLoop mainRunLoop];
+  NSStream *iStream = [_transport input];
+  NSStream *oStream = [_transport output];
+  [iStream removeFromRunLoop: rl forMode: NSDefaultRunLoopMode];
+  [oStream removeFromRunLoop: rl forMode: NSDefaultRunLoopMode];
   dispatch_async([s processingQueue], ^{
      [self handleMessage];
   });
