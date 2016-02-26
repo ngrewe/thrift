@@ -180,11 +180,8 @@ NSString *const TSockerServerTransportKey = @"TSockerServerTransport";
         [self rescheduleDelegate: self
                           onMain: YES];
       }
-    dispatch_sync(dispatch_get_main_queue(), ^{
-      [self setProcessing: NO];
-    });
+    __sync_bool_compare_and_swap(&_processing, YES, NO);
   }
-
 }
 
 - (void)dispatchMessage
@@ -194,7 +191,7 @@ NSString *const TSockerServerTransportKey = @"TSockerServerTransport";
     [self closeStreamsAndNotify];
     return;
   }
-  [self setProcessing: YES];
+  __sync_bool_compare_and_swap(&_processing, NO, YES);
   dispatch_async([s processingQueue], ^{
      [self handleMessage];
   });
