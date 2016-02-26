@@ -58,7 +58,7 @@
   UInt32 got = 0;
   while (got < len) {
 
-    UInt32 read = (UInt32)[_input read:buf+off+got maxLength:len-got];
+    NSInteger read = [_input read:buf+off+got maxLength:len-got];
     if (read <= 0) {
       if (error) {
         *error = [NSError errorWithDomain:TTransportErrorDomain
@@ -80,7 +80,7 @@
   UInt32 got = 0;
   while (got < len) {
 
-    UInt32 read = (UInt32)[_input read:buf+off+got maxLength:len-got];
+    NSInteger read = [_input read:buf+off+got maxLength:len-got];
     if (read <= 0) {
       break;
     }

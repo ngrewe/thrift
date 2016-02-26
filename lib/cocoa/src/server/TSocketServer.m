@@ -22,6 +22,7 @@
 #import "TNSStreamTransport.h"
 #import "TProtocol.h"
 #import "TTransportError.h"
+#import "TProtocolError.h"
 
 #import <sys/socket.h>
 #include <netinet/in.h>
@@ -155,8 +156,18 @@ NSString *const TSockerServerTransportKey = @"TSockerServerTransport";
 
     NSError *error;
     if (![processor processOnInputProtocol:inProtocol outputProtocol:outProtocol error:&error]) {
-      // Handle error
-      NSLog(@"Error processing request: %@", error);
+      BOOL report = YES;
+      // Handle error, but ignore a failed opportunistic read
+      if ([[error domain] isEqualToString: TProtocolErrorDomain]) {
+        NSError *u = [[error userInfo] objectForKey: NSUnderlyingErrorKey];
+        if ([[u domain] isEqualToString: TTransportErrorDomain]
+          && [u code] == TTransportErrorNotOpen) {
+            report = NO;
+          }
+      }
+      if (report) {
+        NSLog(@"Error processing request: %@", error);
+      }
       [self closeStreamsAndNotify];
     } else if ([self checkStreamStatus]) {
         [self setLastUsed: [NSDate date]];

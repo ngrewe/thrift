@@ -77,7 +77,7 @@
 - (NSNumber *) testI32: (SInt32) thing
                  error: (NSError *__autoreleasing *)__thriftError
 {
-    printf("testByte(%d)\n", (int)thing);
+    printf("testI32(%d)\n", (int)thing);
     return [NSNumber numberWithInteger: thing];
 }
 
@@ -231,7 +231,7 @@
     NSDictionary<NSNumber*, NSDictionary<NSNumber*, NSNumber*>*>* mapmap = nil;
     NSMutableDictionary<NSNumber*, NSNumber*>* pos = [NSMutableDictionary new];
     NSMutableDictionary<NSNumber*, NSNumber*>* neg = [NSMutableDictionary new];
-    printf("testMapMap(%d)", hello);
+    printf("testMapMap(%d)\n", hello);
     for (int i = 1; i < 5; i++) {
       NSNumber *n = [NSNumber numberWithInt: i];
       NSNumber *negN = [NSNumber numberWithInt: -i];
