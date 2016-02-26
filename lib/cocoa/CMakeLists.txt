@@ -61,6 +61,7 @@ set(ThriftObjC_OBJC_SRCS
   src/transport/THTTPTransport.m
   src/transport/TMemoryBuffer.m
   src/transport/TNSFileHandleTransport.m
+  src/transport/TNSStreamTransport.m
   src/transport/TTransportError.m
 )
 
@@ -87,6 +88,7 @@ set(ThriftObjC_HDRS
   src/transport/THTTPTransport.h
   src/transport/TMemoryBuffer.h
   src/transport/TNSFileHandleTransport.h
+  src/transport/TNSStreamTransport.h
   src/transport/TTransport.h
   src/transport/TTransportError.h
 )
@@ -227,9 +229,14 @@ if(${ThriftObjC_INSTALL_TYPE} STREQUAL "NONE")
   SET(ThriftObjC_LIB_INSTALL_PATH "${LIB_INSTALL_DIR}")
   SET(ThriftObjC_HEADER_INSTALL_PATH "${INCLUDE_INSTALL_DIR}")
 else()
-   SET(ThriftObjC_LIB_INSTALL_PATH "${GNUSTEP_LIB_INSTALL_PATH}")
-   SET(ThriftObjC_HEADER_INSTALL_PATH "${GNUSTEP_HEADER_INSTALL_PATH}")
-
+  EXEC_PROGRAM(${GNUSTEP_CONFIG}
+    ARGS "--variable=GNUSTEP_${GNUSTEP_INSTALL_TYPE}_LIBRARIES"
+    OUTPUT_VARIABLE GNUSTEP_LIB_INSTALL_PATH)
+  EXEC_PROGRAM(${GNUSTEP_CONFIG}
+    ARGS "--variable=GNUSTEP_${GNUSTEP_INSTALL_TYPE}_HEADERS"
+    OUTPUT_VARIABLE GNUSTEP_HEADER_INSTALL_PATH)
+  SET(ThriftObjC_LIB_INSTALL_PATH "${GNUSTEP_LIB_INSTALL_PATH}")
+  SET(ThriftObjC_HEADER_INSTALL_PATH "${GNUSTEP_HEADER_INSTALL_PATH}")
 endif()
 
 

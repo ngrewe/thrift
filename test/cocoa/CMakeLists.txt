@@ -34,19 +34,59 @@ set(crosstestgencocoa_SOURCES
     gen-cocoa/ThriftTestThriftTest.m
 )
 
+set (TestServerObjC_SOURCES
+  src/TestServer.m
+)
+
+# Compile in ARC mode
+set(ThriftTestObjC_OBJC_FLAGS "${ThriftTestObjC_OBJC_FLAGS} -fobjc-arc")
+
+# Compiler setup in the non-Apple case
+if(NOT APPLE)
+  # A few defines for compatibility:
+  #
+  # - We don't have the [SU]IntNN types, so we must use the stdint ones
+  # - __nullable and __nonnull are problematic for the compiler version we
+  #   target. Redefine to the newer _Nullable and _Nonnull ones
+  # - Darwin specific byte-order swapping functions replaced
+  set(ThriftTestObjC_OBJC_FLAGS
+    "${ThriftTestObjC_OBJC_FLAGS} ${GNUSTEP_OBJC_FLAGS} \
+    -fobjc-arc \
+    -DSInt32=int32_t \
+    -DSInt8=int8_t \
+    -DUInt8=uint8_t \
+    -DUInt32=uint32_t \
+    -DSInt16=int16_t \
+    -DSInt64=int64_t \
+    -DUInt64=uint64_t \
+    -D__nullable=_Nullable \
+    -D__nonnull=_Nonnull \
+    -DFOUNDATION_EXPORT=extern \
+    -DOSSwapLittleToHostInt64=GSSwapLittleI64ToHost \
+    -DOSSwapHostToLittleInt64=GSSwapHostI64ToLittle")
+
+  include_directories(${LIBDISPATCH_INCLUDE_DIRS})
+endif()
+
+
 set_source_files_properties(
   ${crosstestgencocoa_SOURCES}
+  ${TestServerObjC_SOURCES}
 	  PROPERTIES LANGUAGE C
-	    COMPILE_FLAGS "-x objective-c ${ThriftObjC_OBJC_FLAGS} -fobjc-arc "
+	    COMPILE_FLAGS "-x objective-c ${ThriftTestObjC_OBJC_FLAGS}"
 		)
 
 
 add_library(crosstestgencocoa STATIC ${crosstestgencocoa_SOURCES})
 LINK_AGAINST_THRIFT_LIBRARY(crosstestgencocoa ThriftObjC)
 
-add_executable(TestServerObjC src/TestServer.m)
+add_executable(TestServerObjC   ${TestServerObjC_SOURCES})
 target_link_libraries(TestServerObjC crosstestgencocoa)
 LINK_AGAINST_THRIFT_LIBRARY(TestServerObjC ThriftObjC)
+if(NOT APPLE)
+set_target_properties(TestServerObjC PROPERTIES
+  LINK_FLAGS "${GNUSTEP_LINKER_FLAGS}")
+endif()
 #LINK_AGAINST_THRIFT_LIBRARY(TestServer thrift)
 #LINK_AGAINST_THRIFT_LIBRARY(TestServer thriftnb)
 #LINK_AGAINST_THRIFT_LIBRARY(TestServer thriftz)

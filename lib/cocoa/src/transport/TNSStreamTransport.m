@@ -20,6 +20,10 @@
 #import "TNSStreamTransport.h"
 #import "TTransportError.h"
 
+#ifdef GNUSTEP
+#define CFReadStreamSetProperty(a,b,c)
+#define CFWriteStreamSetProperty(a,b,c)
+#endif
 
 @interface TNSStreamTransport ()
 @end

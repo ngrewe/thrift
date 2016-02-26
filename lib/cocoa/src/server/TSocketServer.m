@@ -29,6 +29,7 @@
 
 #ifdef GNUSTEP
 #include <dispatch/dispatch.h>
+#import <GNUstepBase/NSStream+GNUstepBase.h>
 #endif
 
 
@@ -50,7 +51,7 @@ NSString *const TSockerServerTransportKey = @"TSockerServerTransport";
   CFSocketRef _serverSocket;
   CFRunLoopSourceRef _source;
 #else
-
+  GSServerStream *_serverStream;
 #endif
   NSTimer *housekeeping;
 }
@@ -64,6 +65,12 @@ NSString *const TSockerServerTransportKey = @"TSockerServerTransport";
 - (void) _scheduleInputStream: (NSInputStream*)iStream
                  outputStream: (NSOutputStream*)oStream;
 @end
+
+
+#ifdef GNUSTEP
+@interface TSocketServer (GNUstep) <NSStreamDelegate>
+@end
+#endif
 
 @interface TNSStreamTransport () <NSStreamDelegate>
 @end
@@ -96,7 +103,6 @@ NSString *const TSockerServerTransportKey = @"TSockerServerTransport";
 
 - (BOOL) checkStreamStatus
 {
-  __weak TSocketStreamHolder* wSelf = self;
   NSInputStream *iStream = [_transport input];
   if (([iStream streamStatus] > NSStreamStatusWriting)
     || ([iStream streamStatus] < NSStreamStatusOpening)) {
@@ -212,7 +218,7 @@ NSString *const TSockerServerTransportKey = @"TSockerServerTransport";
 @end
 
 
-
+#ifndef GNUSTEP
 CFStringRef TCreateServerDescription(const void* retainedServer)
 {
   NSString *s = [(__bridge TSocketServer*)retainedServer description];
@@ -244,11 +250,12 @@ void TOnSocketAcceptForLiveServer(CFSocketRef sock, CFSocketCallBackType ty,
   }
 
 }
+#endif
 
 @implementation TSocketServer
 
 #ifndef GNUSTEP
-- (BOOL) scheduleServerSocketOnPort:(int)port
+- (BOOL) scheduleServerSocketOnPort: (int)port
 {
   // create a socket.
   int fd = -1;
@@ -298,6 +305,24 @@ void TOnSocketAcceptForLiveServer(CFSocketRef sock, CFSocketCallBackType ty,
   CFRelease(_serverSocket);
 }
 #else
+- (BOOL) scheduleServerSocketOnPort: (int)port
+{
+  _serverStream = [GSServerStream serverStreamToAddr: @"0.0.0.0" port: port];
+  if (nil == _serverStream) {
+    return NO;
+  }
+  [_serverStream setDelegate: self];
+  [_serverStream scheduleInRunLoop: [NSRunLoop mainRunLoop]
+                           forMode: NSDefaultRunLoopMode];
+  [_serverStream open];
+  return YES;
+}
+
+- (void)deallocServerSocket
+{
+  [_serverStream close];
+  _serverStream = nil;
+}
 - (NSFileHandle* _Nullable)fileHandleForPort:(int)port
 {
   struct sockaddr_in addr;
@@ -413,3 +438,22 @@ void TOnSocketAcceptForLiveServer(CFSocketRef sock, CFSocketCallBackType ty,
 }
 
 @end
+
+#ifdef GNUSTEP
+@implementation TSocketServer (GNUstep)
+
+- (void)stream: (NSStream*)stream handleEvent: (NSStreamEvent)event
+{
+  if (event == NSStreamEventHasBytesAvailable) {
+    NSInputStream *iStream = nil;
+    NSOutputStream *oStream = nil;
+    [_serverStream acceptWithInputStream: &iStream
+                           outputStream: &oStream];
+    if ((iStream != nil) && (oStream != nil)) {
+      [self _scheduleInputStream: iStream
+                    outputStream: oStream];
+    }
+  }
+}
+@end
+#endif
